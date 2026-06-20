@@ -10,9 +10,22 @@ use Illuminate\Support\Facades\DB;
 class AccountController extends Controller
 {
     // 口座を新規作成して返す
-    public function store(): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $account = Account::create(['balance' => 0]);
+        $data = $request->validate(
+            array(
+                'user_id'   => array('required', 'integer', 'exists:users,id'),
+                'branch_id' => array('required', 'integer', 'exists:branches,id'),
+            )
+        );
+
+        $account = Account::create(
+            array(
+                'user_id'   => $data['user_id'],
+                'branch_id' => $data['branch_id'],
+                'balance'   => 0,
+            )
+        );
 
         return response()->json($account, 201);
     }
