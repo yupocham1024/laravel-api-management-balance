@@ -10,12 +10,12 @@ flowchart TD
     Client -->|HTTP Request| Route
 
     subgraph Laravel
-        Route[routes/api.php\nURLとControllerの対応表]
-        MW[Middleware\nauth:sanctum\n認証チェック]
-        Controller[Controller\nリクエストの司令塔]
-        Policy[AccountPolicy\n認可チェック\n自分の口座か？]
-        Validate[バリデーション\nrequest->validate]
-        Model[Model\nEloquent ORM]
+        Route["routes/api.php<br/>URLとControllerの対応表"]
+        MW["Middleware<br/>auth:sanctum<br/>認証チェック"]
+        Controller["Controller<br/>リクエストの司令塔"]
+        Policy["AccountPolicy<br/>認可チェック<br/>自分の口座か？"]
+        Validate["バリデーション<br/>request-&gt;validate"]
+        Model["Model<br/>Eloquent ORM"]
     end
 
     DB[(MySQL)]
@@ -33,9 +33,9 @@ flowchart TD
     Model -->|データ| Controller
     Controller -->|JSON Response| Client
 
-    style MW fill:#f9c74f
-    style Policy fill:#f9c74f
-    style Validate fill:#f9c74f
+    style MW fill:#f9c74f,color:#000
+    style Policy fill:#f9c74f,color:#000
+    style Validate fill:#f9c74f,color:#000
 ```
 
 黄色はリクエストが「弾かれる可能性のある関所」。
