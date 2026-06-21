@@ -5,7 +5,7 @@
 口座の開設・残高照会・入出金・取引履歴の取得ができるシンプルな REST API。
 ユーザー・支店・口座・取引履歴の 4 リソースを管理する。
 
-認証機能は持つが、ログイン機能は未実装（将来の拡張を想定してカラムのみ定義）。
+Laravel Sanctum によるトークン認証を実装済み。ログイン・ユーザー新規登録以外のエンドポイントはすべて認証が必要。
 
 ## 技術スタック
 
@@ -17,8 +17,23 @@
 
 ## API エンドポイント
 
+### 認証不要
+
 | メソッド | パス | 説明 |
 |----------|------|------|
+| POST | `/api/users` | ユーザー登録 |
+| POST | `/api/login` | ログイン（トークン発行） |
+
+### 認証必要（`Authorization: Bearer <token>` ヘッダーが必要）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | `/api/logout` | ログアウト（トークン削除） |
+| GET | `/api/users` | ユーザー一覧 |
+| GET | `/api/users/{id}` | ユーザー詳細 |
+| POST | `/api/branches` | 支店作成 |
+| GET | `/api/branches` | 支店一覧 |
+| GET | `/api/branches/{id}` | 支店詳細 |
 | POST | `/api/accounts` | 口座作成 |
 | GET | `/api/accounts/{id}/balance` | 残高照会 |
 | POST | `/api/accounts/{id}/deposit` | 入金 |
@@ -118,8 +133,22 @@ compose.yaml     → 「どんなコンテナを作るか」の設計書
 
 ④ MySQL が初期化済みである
         ↓ 確認: sail artisan migrate が成功している
+        （personal_access_tokens テーブルも含む）
 
 ⑤ この状態で http://localhost へのリクエストが通る
+```
+
+### 初回セットアップ（認証機能含む）
+
+```bash
+# 1. Sanctum をインストール
+./vendor/bin/sail composer require laravel/sanctum
+
+# 2. 設定ファイルとマイグレーションを公開
+./vendor/bin/sail artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
+
+# 3. マイグレーション実行（personal_access_tokens テーブルが作成される）
+./vendor/bin/sail artisan migrate
 ```
 
 ## テーブル定義

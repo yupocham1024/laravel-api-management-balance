@@ -5,6 +5,7 @@
 1. [ローカル環境の構成](#1-ローカル環境の構成)
 2. [Laravel の構成要素](#2-laravel-の構成要素)
 3. [Eloquent ORM](#3-eloquent-orm)
+4. [認証（Laravel Sanctum）](#4-認証laravel-sanctum)
 
 ---
 
@@ -99,6 +100,8 @@ public/index.php（すべてのリクエストが最初に届く唯一の入口�
 bootstrap/app.php（アプリの起動設定・ルートファイルの登録）
     ↓
 routes/api.php（URLとControllerの対応を定義）
+    ↓
+Middleware（認証チェックなど。NGなら401を返してここで終了）
     ↓
 Controller（リクエストを受け取り処理する）
     ↓
@@ -368,3 +371,98 @@ class User {
 ### オートローダー
 
 クラスが初めて使われた瞬間に、対応するファイルを自動で読み込む仕組み。Composer が `vendor/autoload.php` を生成することで実現している。これにより `require` や `include` を手動で書かなくてもクラスが使えるようになる。
+
+---
+
+## 4. 認証（Laravel Sanctum）
+
+### 概要
+
+Laravel Sanctum は API トークン認証を提供するパッケージ。ログイン時にトークンを発行し、以降のリクエストはそのトークンをヘッダーに付けることで認証済みと判断される。
+
+```
+POST /login → トークンを発行
+    ↓
+Authorization: Bearer <token> をヘッダーに付けてリクエスト
+    ↓
+auth:sanctum ミドルウェアがトークンを検証
+    ↓
+有効なら Controller へ。無効なら 401 を返す
+```
+
+### セットアップ手順
+
+```bash
+# 1. Sanctum をインストール
+./vendor/bin/sail composer require laravel/sanctum
+
+# 2. 設定ファイルとマイグレーションをプロジェクトに展開
+#    （vendor/ 内のファイルをプロジェクト直下にコピーする）
+./vendor/bin/sail artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
+
+# 3. マイグレーション実行
+#    （personal_access_tokens テーブルが作成される）
+./vendor/bin/sail artisan migrate
+```
+
+### 関係するファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `app/Models/User.php` | `HasApiTokens` トレイトを追加 |
+| `app/Http/Controllers/AuthController.php` | ログイン・ログアウト処理 |
+| `routes/api.php` | `auth:sanctum` ミドルウェアでルートをグループ化 |
+| `database/migrations/*_create_personal_access_tokens_table.php` | トークン管理テーブル（vendor:publish で生成） |
+
+### Middleware
+
+リクエストと Controller の間に挟まるフィルター処理。認証以外にもレート制限・ログ記録などに使われる。
+
+```php
+// routes/api.php
+Route::middleware('auth:sanctum')->group(function () {
+    // このグループ内のルートはすべて認証が必要
+    Route::get('/accounts/{account}/balance', [AccountController::class, 'balance']);
+});
+```
+
+`auth:sanctum` は Sanctum が提供するミドルウェアで、以下を行う：
+1. `Authorization: Bearer <token>` ヘッダーからトークンを取り出す
+2. `personal_access_tokens` テーブルでトークンを検索
+3. 有効なら認証済みユーザーをリクエストにセットして Controller へ渡す
+4. 無効なら 401 を返す
+
+### ログイン・ログアウトの流れ
+
+**ログイン（POST /login）**
+
+```
+email + password を送信
+    ↓
+Auth::attempt() が users テーブルと照合
+    ↓
+一致 → createToken() が personal_access_tokens にレコードを作成
+    ↓
+トークン文字列をレスポンスとして返す
+```
+
+**ログアウト（POST /logout）**
+
+```
+Bearer トークン付きでリクエスト
+    ↓
+currentAccessToken()->delete() で personal_access_tokens からレコードを削除
+    ↓
+以降そのトークンは使用不可
+```
+
+### 認証済みユーザーの取得
+
+ミドルウェアを通過したリクエストでは `$request->user()` で認証済みユーザーを取得できる。
+
+```php
+public function logout(Request $request): JsonResponse
+{
+    $request->user()->currentAccessToken()->delete();
+}
+```
