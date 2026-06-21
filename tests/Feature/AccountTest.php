@@ -18,8 +18,7 @@ class AccountTest extends TestCase
         $user   = User::factory()->create();
         $branch = Branch::factory()->create();
 
-        $response = $this->postJson('/api/accounts', [
-            'user_id'   => $user->id,
+        $response = $this->actingAs($user)->postJson('/api/accounts', [
             'branch_id' => $branch->id,
         ]);
 
@@ -27,39 +26,37 @@ class AccountTest extends TestCase
                  ->assertJsonFragment(['user_id' => $user->id, 'branch_id' => $branch->id]);
     }
 
-    // 口座作成: user_id が欠けている
-    public function test_returns_validation_error_when_user_id_is_missing(): void
+    // 口座作成: branch_id が欠けている
+    public function test_returns_validation_error_when_branch_id_is_missing(): void
     {
-        $branch = Branch::factory()->create();
+        $user = User::factory()->create();
 
-        $response = $this->postJson('/api/accounts', [
-            'branch_id' => $branch->id,
-        ]);
+        $response = $this->actingAs($user)->postJson('/api/accounts', []);
 
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['user_id']);
+                 ->assertJsonValidationErrors(['branch_id']);
     }
 
-    // 口座作成: 存在しない user_id
-    public function test_returns_validation_error_when_user_does_not_exist(): void
+    // 口座作成: 存在しない branch_id
+    public function test_returns_validation_error_when_branch_does_not_exist(): void
     {
-        $branch = Branch::factory()->create();
+        $user = User::factory()->create();
 
-        $response = $this->postJson('/api/accounts', [
-            'user_id'   => 99999,
-            'branch_id' => $branch->id,
+        $response = $this->actingAs($user)->postJson('/api/accounts', [
+            'branch_id' => 99999,
         ]);
 
         $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['user_id']);
+                 ->assertJsonValidationErrors(['branch_id']);
     }
 
     // 残高取得: 正常系
     public function test_can_get_balance(): void
     {
-        $account = Account::factory()->create(['balance' => 5000]);
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id, 'balance' => 5000]);
 
-        $response = $this->getJson("/api/accounts/{$account->id}/balance");
+        $response = $this->actingAs($user)->getJson("/api/accounts/{$account->id}/balance");
 
         $response->assertStatus(200)
                  ->assertJsonFragment(['account_id' => $account->id]);
@@ -68,17 +65,32 @@ class AccountTest extends TestCase
     // 残高取得: 存在しない口座
     public function test_returns_404_when_account_not_found_on_balance(): void
     {
-        $response = $this->getJson('/api/accounts/99999/balance');
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/accounts/99999/balance');
 
         $response->assertStatus(404);
+    }
+
+    // 残高取得: 他ユーザーの口座
+    public function test_returns_403_when_accessing_other_users_account_balance(): void
+    {
+        $owner   = User::factory()->create();
+        $other   = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $owner->id]);
+
+        $response = $this->actingAs($other)->getJson("/api/accounts/{$account->id}/balance");
+
+        $response->assertStatus(403);
     }
 
     // 入金: 正常系
     public function test_can_deposit(): void
     {
-        $account = Account::factory()->create(['balance' => 1000]);
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id, 'balance' => 1000]);
 
-        $response = $this->postJson("/api/accounts/{$account->id}/deposit", [
+        $response = $this->actingAs($user)->postJson("/api/accounts/{$account->id}/deposit", [
             'amount' => 500,
         ]);
 
@@ -89,9 +101,10 @@ class AccountTest extends TestCase
     // 入金: amount が欠けている
     public function test_returns_validation_error_when_deposit_amount_is_missing(): void
     {
-        $account = Account::factory()->create();
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id]);
 
-        $response = $this->postJson("/api/accounts/{$account->id}/deposit", []);
+        $response = $this->actingAs($user)->postJson("/api/accounts/{$account->id}/deposit", []);
 
         $response->assertStatus(422)
                  ->assertJsonValidationErrors(['amount']);
@@ -100,9 +113,10 @@ class AccountTest extends TestCase
     // 入金: amount が 0
     public function test_returns_validation_error_when_deposit_amount_is_zero(): void
     {
-        $account = Account::factory()->create();
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id]);
 
-        $response = $this->postJson("/api/accounts/{$account->id}/deposit", [
+        $response = $this->actingAs($user)->postJson("/api/accounts/{$account->id}/deposit", [
             'amount' => 0,
         ]);
 
@@ -110,12 +124,27 @@ class AccountTest extends TestCase
                  ->assertJsonValidationErrors(['amount']);
     }
 
+    // 入金: 他ユーザーの口座
+    public function test_returns_403_when_depositing_to_other_users_account(): void
+    {
+        $owner   = User::factory()->create();
+        $other   = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $owner->id]);
+
+        $response = $this->actingAs($other)->postJson("/api/accounts/{$account->id}/deposit", [
+            'amount' => 500,
+        ]);
+
+        $response->assertStatus(403);
+    }
+
     // 出金: 正常系
     public function test_can_withdraw(): void
     {
-        $account = Account::factory()->create(['balance' => 1000]);
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id, 'balance' => 1000]);
 
-        $response = $this->postJson("/api/accounts/{$account->id}/withdraw", [
+        $response = $this->actingAs($user)->postJson("/api/accounts/{$account->id}/withdraw", [
             'amount' => 300,
         ]);
 
@@ -126,9 +155,10 @@ class AccountTest extends TestCase
     // 出金: 残高不足
     public function test_returns_422_when_balance_is_insufficient(): void
     {
-        $account = Account::factory()->create(['balance' => 100]);
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id, 'balance' => 100]);
 
-        $response = $this->postJson("/api/accounts/{$account->id}/withdraw", [
+        $response = $this->actingAs($user)->postJson("/api/accounts/{$account->id}/withdraw", [
             'amount' => 500,
         ]);
 
@@ -138,12 +168,13 @@ class AccountTest extends TestCase
     // 取引履歴取得: 正常系
     public function test_can_get_transactions(): void
     {
-        $account = Account::factory()->create(['balance' => 1000]);
+        $user    = User::factory()->create();
+        $account = Account::factory()->create(['user_id' => $user->id, 'balance' => 1000]);
 
-        $this->postJson("/api/accounts/{$account->id}/deposit", ['amount' => 500]);
-        $this->postJson("/api/accounts/{$account->id}/withdraw", ['amount' => 200]);
+        $this->actingAs($user)->postJson("/api/accounts/{$account->id}/deposit", ['amount' => 500]);
+        $this->actingAs($user)->postJson("/api/accounts/{$account->id}/withdraw", ['amount' => 200]);
 
-        $response = $this->getJson("/api/accounts/{$account->id}/transactions");
+        $response = $this->actingAs($user)->getJson("/api/accounts/{$account->id}/transactions");
 
         $response->assertStatus(200)
                  ->assertJsonCount(2);
@@ -152,7 +183,9 @@ class AccountTest extends TestCase
     // 取引履歴取得: 存在しない口座
     public function test_returns_404_when_account_not_found_on_transactions(): void
     {
-        $response = $this->getJson('/api/accounts/99999/transactions');
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/accounts/99999/transactions');
 
         $response->assertStatus(404);
     }

@@ -6,26 +6,24 @@ use App\Models\Account;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class AccountController extends Controller
 {
+    use AuthorizesRequests;
+
     // 口座を新規作成して返す
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(
-            array(
-                'user_id'   => array('required', 'integer', 'exists:users,id'),
-                'branch_id' => array('required', 'integer', 'exists:branches,id'),
-            )
-        );
+        $data = $request->validate([
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+        ]);
 
-        $account = Account::create(
-            array(
-                'user_id'   => $data['user_id'],
-                'branch_id' => $data['branch_id'],
-                'balance'   => 0,
-            )
-        );
+        $account = Account::create([
+            'user_id'   => $request->user()->id,
+            'branch_id' => $data['branch_id'],
+            'balance'   => 0,
+        ]);
 
         return response()->json($account, 201);
     }
@@ -33,6 +31,8 @@ class AccountController extends Controller
     // 指定口座の残高を返す
     public function balance(Account $account): JsonResponse
     {
+        $this->authorize('access', $account);
+
         return response()->json([
             'account_id' => $account->id,
             'balance'    => $account->balance,
@@ -42,6 +42,8 @@ class AccountController extends Controller
     // 指定口座に入金して更新後の残高を返す
     public function deposit(Request $request, Account $account): JsonResponse
     {
+        $this->authorize('access', $account);
+
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
         ]);
@@ -63,6 +65,8 @@ class AccountController extends Controller
     // 指定口座から出金して更新後の残高を返す（残高不足なら 422 を返す）
     public function withdraw(Request $request, Account $account): JsonResponse
     {
+        $this->authorize('access', $account);
+
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
         ]);
@@ -88,6 +92,8 @@ class AccountController extends Controller
     // 指定口座の取引履歴を新しい順で返す
     public function transactions(Account $account): JsonResponse
     {
+        $this->authorize('access', $account);
+
         return response()->json(
             $account->transactions()->latest()->get()
         );

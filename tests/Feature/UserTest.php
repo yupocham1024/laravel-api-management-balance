@@ -84,7 +84,7 @@ class UserTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $response = $this->getJson("/api/users/{$user->id}");
+        $response = $this->actingAs($user)->getJson("/api/users/{$user->id}");
 
         $response->assertStatus(200)
                  ->assertJsonFragment(['id' => $user->id]);
@@ -93,7 +93,9 @@ class UserTest extends TestCase
     // ユーザー単体取得: 存在しない
     public function test_returns_404_when_user_not_found(): void
     {
-        $response = $this->getJson('/api/users/99999');
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/users/99999');
 
         $response->assertStatus(404);
     }
@@ -101,20 +103,24 @@ class UserTest extends TestCase
     // ユーザー全体取得: 存在する
     public function test_can_get_user_list(): void
     {
+        $user = User::factory()->create();
+
         User::factory()->count(3)->create();
 
-        $response = $this->getJson('/api/users');
+        $response = $this->actingAs($user)->getJson('/api/users');
 
         $response->assertStatus(200)
-                 ->assertJsonCount(3);
+                 ->assertJsonCount(4);
     }
 
     // ユーザー全体取得: 存在しない
     public function test_returns_empty_array_when_no_users_exist(): void
     {
-        $response = $this->getJson('/api/users');
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->getJson('/api/users');
 
         $response->assertStatus(200)
-                 ->assertExactJson([]);
+                 ->assertJsonCount(1);
     }
 }
